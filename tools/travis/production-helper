@@ -44,25 +44,6 @@ EOF
 
 su zulip -c /home/zulip/deployments/current/scripts/setup/initialize-database
 
-# TODO: Ideally this would test actually logging in, but this is a start.
-echo; echo "Now testing that the newly installed server's homepage loads"; echo
-
-wget https://localhost -O /tmp/index.html --no-check-certificate -S 2> /tmp/wget-output || true # || true so we see errors.log if this 500s
-grep -vi '\(Vary\|Content-Language\|expires\|issued by\|modified\|saved\|[.][.][.]\|Date\|[-][-]\)' /tmp/wget-output > /tmp/http-headers-processed
-if ! diff -ur /tmp/http-headers-processed ~/success-http-headers.txt; then
-    set +x
-    echo
-    echo "FAILURE: The HTTP Headers returned from loading the homepage on the server do not match the contents of tools/travis/success-http-headers.txt.  Typically, this means that the server threw a 500 when trying to load the homepage."
-    echo "Displaying the contents of the server's error log:"
-    echo
-    cat /var/log/zulip/errors.log
-    echo
-    echo "Displaying the contents of the main server log:"
-    echo
-    cat /var/log/zulip/server.log
-    exit 1
-fi
-
 echo; echo "Now testing that the supervisord jobs are running properly"; echo
 sleep 10 # Guaranteed to have a working supervisord process get an extra digit
 if supervisorctl status | grep -vq RUNNING || supervisorctl status | sed 's/^.*uptime //' | grep -q 0:00:0; then
@@ -83,6 +64,25 @@ if supervisorctl status | grep -vq RUNNING || supervisorctl status | sed 's/^.*u
     exit 1
 fi
 
+# TODO: Ideally this would test actually logging in, but this is a start.
+echo; echo "Now testing that the newly installed server's homepage loads"; echo
+
+wget https://localhost -O /tmp/index.html --no-check-certificate -S 2> /tmp/wget-output || true # || true so we see errors.log if this 500s
+grep -vi '\(Vary\|Content-Language\|expires\|issued by\|modified\|saved\|[.][.][.]\|Date\|[-][-]\)' /tmp/wget-output > /tmp/http-headers-processed
+if ! diff -ur /tmp/http-headers-processed ~/success-http-headers.txt; then
+    set +x
+    echo
+    echo "FAILURE: The HTTP Headers returned from loading the homepage on the server do not match the contents of tools/travis/success-http-headers.txt.  Typically, this means that the server threw a 500 when trying to load the homepage."
+    echo "Displaying the contents of the server's error log:"
+    echo
+    cat /var/log/zulip/errors.log
+    echo
+    echo "Displaying the contents of the main server log:"
+    echo
+    cat /var/log/zulip/server.log
+    exit 1
+fi
+
 echo; echo "Now running RabbitMQ consumer Nagios tests"; echo
 # First run the check that usually runs in cron and populates the state files
 /home/zulip/deployments/current/scripts/nagios/check-rabbitmq-consumers
@@ -100,7 +100,8 @@ done
 echo; echo "Now running additional Nagios tests"; echo
 if ! /usr/lib/nagios/plugins/zulip_app_frontend/check_queue_worker_errors || \
    ! su zulip -c /usr/lib/nagios/plugins/zulip_postgres_appdb/check_fts_update_log || \
-   ! su zulip -c "/usr/lib/nagios/plugins/zulip_app_frontend/check_send_receive_time --site=https://127.0.0.1/api --nagios --insecure"; then
+   ! su zulip -c "/usr/lib/nagios/plugins/zulip_app_frontend/check_send_receive_time --site=https://127.0.0.1/api --nagios --insecure" || \
+   ! su zulip -c "/usr/lib/nagios/plugins/zulip_app_frontend/check_send_receive_time --site=https://127.0.0.1/api --nagios --websocket --insecure"; then
     set +x
     echo
     echo "FAILURE: Nagios checks don't pass:"

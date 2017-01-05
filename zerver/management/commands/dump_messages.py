@@ -14,10 +14,10 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         # type: (CommandParser) -> None
         default_cutoff = time.time() - 60 * 60 * 24 * 30 # 30 days.
-        parser.add_argument('--domain',
-                            dest='domain',
+        parser.add_argument('--realm',
+                            dest='string_id',
                             type=str,
-                            help='The domain whose public streams you want to dump.')
+                            help='The subdomain/string_id of realm whose public streams you want to dump.')
 
         parser.add_argument('--since',
                             dest='since',
@@ -27,7 +27,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         # type: (*Any, **Any) -> None
-        realm = get_realm(options["domain"])
+        realm = get_realm(options["string_id"])
         streams = Stream.objects.filter(realm=realm, invite_only=False)
         recipients = Recipient.objects.filter(
             type=Recipient.STREAM, type_id__in=[stream.id for stream in streams])

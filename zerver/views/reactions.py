@@ -1,6 +1,8 @@
+from __future__ import absolute_import
+
 from django.http import HttpRequest, HttpResponse
 from django.utils.translation import ugettext as _
-from six import text_type
+from typing import Text
 
 from zerver.decorator import authenticated_json_post_view,\
     has_request_variables, REQ, to_non_negative_int
@@ -9,20 +11,25 @@ from zerver.lib.bugdown import emoji_list
 from zerver.lib.message import access_message
 from zerver.lib.request import JsonableError
 from zerver.lib.response import json_success
-from zerver.models import Reaction, UserProfile
+from zerver.models import Reaction, Realm, UserProfile
+
+def check_valid_emoji(realm, emoji_name):
+    # type: (Realm, Text) -> None
+    if emoji_name in set(realm.get_emoji().keys()):
+        return
+    if emoji_name in emoji_list:
+        return
+    raise JsonableError(_("Emoji '%s' does not exist" % (emoji_name,)))
 
 @has_request_variables
-def add_reaction_backend(request, user_profile, emoji_name=REQ('emoji'),
-                         message_id = REQ('message_id', converter=to_non_negative_int)):
-    # type: (HttpRequest, UserProfile, text_type, int) -> HttpResponse
+def add_reaction_backend(request, user_profile, message_id, emoji_name):
+    # type: (HttpRequest, UserProfile, int, Text) -> HttpResponse
 
     # access_message will throw a JsonableError exception if the user
     # cannot see the message (e.g. for messages to private streams).
     message = access_message(user_profile, message_id)[0]
 
-    existing_emojis = set(message.sender.realm.get_emoji().keys()) or set(emoji_list)
-    if emoji_name not in existing_emojis:
-        raise JsonableError(_("Emoji '%s' does not exist" % (emoji_name,)))
+    check_valid_emoji(message.sender.realm, emoji_name)
 
     # We could probably just make this check be a try/except for the
     # IntegrityError from it already existing, but this is a bit cleaner.
@@ -36,17 +43,14 @@ def add_reaction_backend(request, user_profile, emoji_name=REQ('emoji'),
     return json_success()
 
 @has_request_variables
-def remove_reaction_backend(request, user_profile, emoji_name=REQ('emoji'),
-                            message_id = REQ('message_id', converter=to_non_negative_int)):
-    # type: (HttpRequest, UserProfile, text_type, int) -> HttpResponse
+def remove_reaction_backend(request, user_profile, message_id, emoji_name):
+    # type: (HttpRequest, UserProfile, int, Text) -> HttpResponse
 
     # access_message will throw a JsonableError exception if the user
     # cannot see the message (e.g. for messages to private streams).
     message = access_message(user_profile, message_id)[0]
 
-    existing_emojis = set(message.sender.realm.get_emoji().keys()) or set(emoji_list)
-    if emoji_name not in existing_emojis:
-        raise JsonableError(_("Emoji '%s' does not exist" % (emoji_name,)))
+    check_valid_emoji(message.sender.realm, emoji_name)
 
     # We could probably just make this check be a try/except for the
     # IntegrityError from it already existing, but this is a bit cleaner.

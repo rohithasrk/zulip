@@ -10,7 +10,7 @@
 coverage==4.2
 
 # fake for LDAP testing
-git+https://github.com/umairwaheed/fakeldap.git@7e824313d98a96e52119c359a9b0233fe0b8e585#egg=fakeldap==0.5.1
+git+https://github.com/umairwaheed/fakeldap.git@37bc199e9589c31f4bb5bae1445ad1cd7f84e1ac#egg=fakeldap==0.5.1.0zulip1
 
 # Needed to run pyflakes linter
 pyflakes==1.3.0
@@ -21,6 +21,6 @@ transifex-client==0.12.2
 # Dependency of transifex-client
 urllib3==1.19
 
-# Install the Zulip API bindings into the virtualenv in edit mode, so
-# that we're always running the latest version in git.
--e api/
+# Install the Zulip API bindings into the virtualenv; note that this
+# won't be automatically updated for new versions of api/.
+api/

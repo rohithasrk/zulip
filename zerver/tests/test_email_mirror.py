@@ -14,7 +14,7 @@ from zerver.lib.test_classes import (
 
 from zerver.models import (
     get_display_recipient, get_stream, get_user_profile_by_email,
-    Recipient, get_realm_by_string_id,
+    Recipient, get_realm,
 )
 
 from zerver.lib.actions import (
@@ -42,19 +42,18 @@ import mock
 import os
 import sys
 from os.path import dirname, abspath
-from six import text_type
 from six.moves import cStringIO as StringIO
 from django.conf import settings
 
 from zerver.lib.str_utils import force_str
-from typing import Any, Callable, Mapping, Union
+from typing import Any, Callable, Mapping, Union, Text
 
 class TestEmailMirrorLibrary(ZulipTestCase):
     def test_get_missed_message_token(self):
         # type: () -> None
 
         def get_token(address):
-            # type: (text_type) -> text_type
+            # type: (Text) -> Text
             with self.settings(EMAIL_GATEWAY_PATTERN="%s@example.com"):
                 return get_missed_message_token_from_address(address)
 
@@ -358,7 +357,7 @@ class TestCommandMTA(TestCase):
         # type: (mock.Mock) -> None
 
         sender = "hamlet@zulip.com"
-        stream = get_stream("Denmark", get_realm_by_string_id("zulip"))
+        stream = get_stream("Denmark", get_realm("zulip"))
         stream_to_address = encode_email_address(stream)
 
         template_path = os.path.join(MAILS_DIR, "simple.txt")

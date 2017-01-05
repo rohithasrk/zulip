@@ -5,7 +5,7 @@ var emoji_list = [{emoji_name: "tada", emoji_url: "TBD"},
 var stream_list = ['Denmark', 'Sweden'];
 
 set_global('emoji', {emojis: emoji_list});
-set_global('stream_data', {subscribed_streams: function () {
+set_global('stream_data', {subscribed_subs: function () {
     return stream_list;
 }});
 
@@ -31,7 +31,7 @@ global.people.add({
     full_name: "Deactivated User",
 });
 
-(function test_add_topic () {
+(function test_add_topic() {
     ct.add_topic('Denmark', 'civil fears');
     ct.add_topic('devel', 'fading');
     ct.add_topic('denmark', 'acceptance');
@@ -41,7 +41,7 @@ global.people.add({
     assert.deepEqual(ct.topics_seen_for('Denmark'), ['With Twisted Metal', 'acceptance', 'civil fears']);
 }());
 
-(function test_begins_typeahead () {
+(function test_begins_typeahead() {
     // Stub out split_at_cursor that uses $(':focus')
     ct.split_at_cursor = function (word) { return [word, '']; };
 

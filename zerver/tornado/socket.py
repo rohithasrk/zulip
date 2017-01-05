@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 
-from six import text_type
-from typing import Any, Union, Mapping, Optional
+from typing import Any, Union, Mapping, Optional, Text
 
 from django.conf import settings
 from django.utils import timezone
@@ -35,7 +34,7 @@ from zerver.tornado.event_queue import get_client_descriptor
 logger = logging.getLogger('zulip.socket')
 
 def get_user_profile(session_id):
-    # type: (Optional[text_type]) -> Optional[UserProfile]
+    # type: (Optional[Text]) -> Optional[UserProfile]
     if session_id is None:
         return None
 
@@ -72,7 +71,7 @@ def deregister_connection(conn):
 redis_client = get_redis_client()
 
 def req_redis_key(req_id):
-    # type: (text_type) -> text_type
+    # type: (Text) -> Text
     return u'socket_req_status:%s' % (req_id,)
 
 class SocketAuthError(Exception):
@@ -305,7 +304,7 @@ def respond_send_message(data):
 # securely send us the zulip.com cookie, which we use as part of our
 # authentication scheme.
 sockjs_router = sockjs.tornado.SockJSRouter(SocketConnection, "/sockjs",
-                                            {'sockjs_url': 'https://%s/static/third/sockjs/sockjs-0.3.4.js' % (
+                                            {'sockjs_url': 'https://%s/node_modules/sockjs-client/sockjs.js' % (
                                                                 settings.EXTERNAL_HOST,),
                                              'disabled_transports': ['eventsource', 'htmlfile']})
 def get_sockjs_router():

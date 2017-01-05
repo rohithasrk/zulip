@@ -67,7 +67,10 @@ function query_matches_person(query, person) {
 }
 
 function query_matches_stream(query, stream) {
-    return ( stream.toLowerCase().indexOf(query.toLowerCase()) !== -1);
+    query = query.toLowerCase();
+
+    return ( stream.name       .toLowerCase().indexOf(query) !== -1
+         ||  stream.description.toLowerCase().indexOf(query) !== -1);
 }
 
 // Case-insensitive
@@ -135,14 +138,21 @@ function handle_keydown(e) {
             }
 
             // Send the message on Ctrl/Cmd-Enter or if the user has configured enter to
-            // send and the shift key is not pressed.
-            if (e.target.id === "new_message_content" && code === 13 &&
-                (e.metaKey || e.ctrlKey || (page_params.enter_sends && !e.shiftKey))
-               ) {
+            // send and the Shift/Ctrl/Cmd/Alt keys are not pressed.
+            // Otherwise, make sure to insert a newline instead
+            if (e.target.id === "new_message_content" && code === 13) {
                 e.preventDefault();
-                if ($("#compose-send-button").attr('disabled') !== "disabled") {
-                    $("#compose-send-button").attr('disabled', 'disabled');
-                    compose.finish();
+
+                if ((!page_params.enter_sends && (e.metaKey || e.ctrlKey)) ||
+                    (page_params.enter_sends && !(e.shiftKey || e.ctrlKey || e.metaKey || e.altKey))
+                ) {
+                    if ($("#compose-send-button").attr('disabled') !== "disabled") {
+                        $("#compose-send-button").attr('disabled', 'disabled');
+                        compose.finish();
+                    }
+                } else {
+                    $("#new_message_content").caret('\n');
+                    compose.autosize_textarea();
                 }
             }
         }
@@ -165,7 +175,7 @@ function select_on_focus(field_id) {
     // conditions in Chrome so we need to protect against infinite
     // recursion.
     var in_handler = false;
-    $("#" + field_id).focus(function (e) {
+    $("#" + field_id).focus(function () {
         if (in_handler) {
             return;
         }
@@ -264,7 +274,7 @@ exports.compose_content_begins_typeahead = function (query) {
 
         this.completing = 'stream';
         this.token = current_token.substring(current_token.indexOf("#")+1);
-        return stream_data.subscribed_streams();
+        return stream_data.subscribed_subs();
     }
     return false;
 };
@@ -276,7 +286,7 @@ exports.content_highlighter = function (item) {
         var item_formatted = typeahead_helper.render_person(item);
         return typeahead_helper.highlight_with_escaping(this.token, item_formatted);
     } else if (this.completing === 'stream') {
-        return typeahead_helper.highlight_with_escaping(this.token, item);
+        return typeahead_helper.render_stream(this.token, item);
     }
 };
 
@@ -298,7 +308,7 @@ exports.content_typeahead_selected = function (item) {
         $(document).trigger('usermention_completed.zulip', {mentioned: item});
     } else if (this.completing === 'stream') {
         beginning = (beginning.substring(0, beginning.length - this.token.length-1)
-                + '#**' + item + '** ');
+                + '#**' + item.name + '** ');
         $(document).trigger('streamname_completed.zulip', {stream: item});
     }
 
@@ -378,7 +388,7 @@ exports.initialize = function () {
 
     // limit number of items so the list doesn't fall off the screen
     $( "#stream" ).typeahead({
-        source: function (query, process) {
+        source: function () {
             return stream_data.subscribed_streams();
         },
         items: 3,
@@ -396,7 +406,7 @@ exports.initialize = function () {
     });
 
     $( "#subject" ).typeahead({
-        source: function (query, process) {
+        source: function () {
             var stream_name = $("#stream").val();
             return exports.topics_seen_for(stream_name);
         },
@@ -429,16 +439,23 @@ exports.initialize = function () {
             if (! current_recipient.match(/\S/)) {
                 return false;
             }
+            var recipients = util.extract_pm_recipients(this.query);
+            if (recipients.indexOf(item.email) > -1) {
+                return false;
+            }
 
             return query_matches_person(current_recipient, item);
         },
         sorter: typeahead_helper.sort_recipientbox_typeahead,
-        updater: function (item) {
+        updater: function (item, event) {
             var previous_recipients = exports.get_cleaned_pm_recipients(this.query);
             previous_recipients.pop();
             previous_recipients = previous_recipients.join(", ");
             if (previous_recipients.length !== 0) {
                 previous_recipients += ", ";
+            }
+            if (event && event.type === 'click') {
+                ui.focus_on('private_message_recipient');
             }
             return previous_recipients + item.email + ", ";
         },
@@ -447,7 +464,7 @@ exports.initialize = function () {
 
     exports.initialize_compose_typeahead("#new_message_content", {mention: true, emoji: true, stream: true});
 
-    $( "#private_message_recipient" ).blur(function (event) {
+    $( "#private_message_recipient" ).blur(function () {
         var val = $(this).val();
         var recipients = exports.get_cleaned_pm_recipients(val);
         $(this).val(recipients.join(", "));

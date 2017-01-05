@@ -30,10 +30,10 @@ Example: ./manage.py realm_emoji --realm=zulip.com --op=show
     def add_arguments(self, parser):
         # type: (ArgumentParser) -> None
         parser.add_argument('-r', '--realm',
-                            dest='domain',
+                            dest='string_id',
                             type=str,
                             required=True,
-                            help='The name of the realm.')
+                            help='The subdomain or string_id of the realm.')
         parser.add_argument('--op',
                             dest='op',
                             type=str,
@@ -46,7 +46,7 @@ Example: ./manage.py realm_emoji --realm=zulip.com --op=show
 
     def handle(self, *args, **options):
         # type: (*Any, **str) -> None
-        realm = get_realm(options["domain"])
+        realm = get_realm(options["string_id"])
         if options["op"] == "show":
             for name, url in six.iteritems(realm.get_emoji()):
                 print(name, url)

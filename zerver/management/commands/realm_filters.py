@@ -20,18 +20,18 @@ NOTE: Regexes must be simple enough that they can be easily translated to JavaSc
       * Named groups will be converted to numbered groups automatically
       * Inline-regex flags will be stripped, and where possible translated to RegExp-wide flags
 
-Example: ./manage.py realm_filters --realm=zulip.com --op=add '#(?P<id>[0-9]{2,8})' 'https://trac.humbughq.com/ticket/%(id)s'
-Example: ./manage.py realm_filters --realm=zulip.com --op=remove '#(?P<id>[0-9]{2,8})'
-Example: ./manage.py realm_filters --realm=zulip.com --op=show
+Example: ./manage.py realm_filters --realm=zulip --op=add '#(?P<id>[0-9]{2,8})' 'https://trac.humbughq.com/ticket/%(id)s'
+Example: ./manage.py realm_filters --realm=zulip --op=remove '#(?P<id>[0-9]{2,8})'
+Example: ./manage.py realm_filters --realm=zulip --op=show
 """
 
     def add_arguments(self, parser):
         # type: (ArgumentParser) -> None
         parser.add_argument('-r', '--realm',
-                            dest='domain',
+                            dest='string_id',
                             type=str,
                             required=True,
-                            help='The name of the realm to adjust filters for.')
+                            help='The subdomain or string_id of the realm to adjust filters for.')
         parser.add_argument('--op',
                             dest='op',
                             type=str,
@@ -44,9 +44,9 @@ Example: ./manage.py realm_filters --realm=zulip.com --op=show
 
     def handle(self, *args, **options):
         # type: (*Any, **str) -> None
-        realm = get_realm(options["domain"])
+        realm = get_realm(options["string_id"])
         if options["op"] == "show":
-            print("%s: %s" % (realm.domain, all_realm_filters().get(realm.domain, [])))
+            print("%s: %s" % (realm.string_id, all_realm_filters().get(realm.id, [])))
             sys.exit(0)
 
         pattern = options['pattern']

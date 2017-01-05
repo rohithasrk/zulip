@@ -18,8 +18,8 @@ class Command(BaseCommand):
 Usage examples:
 
 ./manage.py client_activity
-./manage.py client_activity zulip.com
-./manage.py client_activity jesstess@zulip.com"""
+./manage.py client_activity zulip
+./manage.py client_activity hamlet@zulip.com"""
 
     def add_arguments(self, parser):
         # type: (ArgumentParser) -> None

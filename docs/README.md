@@ -106,7 +106,7 @@ environment setup, you simply need to reload your browser on
 `http://localhost:9991/help/foo` to see the latest version of `foo.md`
 rendered.
 
-Since raw HTML is supported in Markdown, you can include arbitraty
+Since raw HTML is supported in Markdown, you can include arbitrary
 HTML in your documentation in order to do fancy things like
 highlighting an important aspect of your code.  We'll likely add a
 library of common components over time, which will be documented
@@ -115,6 +115,121 @@ below.
 ### Supported features
 
 * All the usual features of Markdown with raw HTML enabled so you can
-  do custom things as needed.
-* Code blocks with syntax highlighting.
+  do custom things with HTML/CSS as needed. The goal is to make
+  reusable markdown syntax for things we need often, though.
+* Code blocks with syntax highlighting, similar to Zulip's own markdown.
 * Anchor tags for linking to headers in other documents.
+* You can create special highlight warning blocks using e.g.:
+```
+!!! warn "title of warning"
+    Body of warning
+```
+
+  to create a special warning block with title "title of warning" to
+  highlight something important.  The whitespace is important.  Often,
+  we just use "" as the title.  `!!! tip "title"` is useful for less
+  scary tips.  See
+  [the python-markdown docs on this extension](https://pythonhosted.org/Markdown/extensions/admonition.html)
+  for details on how this extension works; essentially the value
+  `warn` or `tip` is an extra CSS class added to the admonition.
+
+### Style guide
+
+* Names of buttons, fields, etc. should be **bolded** (e.g. **Settings**
+page, **Change Password** button, **Email** field). No quotation marks
+should be used.
+* All multi-step instructions should be formatted as a series of
+numbered steps. E.g.:
+  ```
+  1. Do something
+  2. Do the next thing.
+  ```
+  Keep the steps simple — "do X, then Y, then Z" is three steps, not one.
+
+* Images and additional notes or instructions are kept within a single step by
+indenting them.
+
+* Keep in mind that the UI may change — don't describe it in more detail
+  than is needed.
+    * Never refer specifically to button colors.
+
+* All icons should be referenced by their names and images within parentheses, e.g.: "between the **A**
+(![A](/images/formatting.png)) and **eye** (![eye](/images/eye.png)) icons"
+
+* Guidelines for **tips** and **warnings**:
+
+  * A **tip** is any suggestion for the user that is not part of the main
+    set of instructions. E.g. it may address a common problem users may
+    encounter while following the instructions, or point to an option
+    for power users.
+  * A **warning** is a note on what happens when there is some kind of problem.
+    Tips are more common than warnings.
+  * All tips/warnings should appear inside tip/warning blocks.
+    They should not be included as
+    part of the numbered instructions or displayed in plain paragraphs.
+  * There should be only one tip/warning inside each block. It is perfectly
+    fine to use multiple consecutive tip boxes.
+  * Generally, no title for the tip/warning block is needed.
+  * Example **tip** from the sign-in doc page:
+    ```
+    !!! tip ""
+        If you've forgotten your password, see the
+        [Change your password](/help/change-your-password) page for
+        instructions on how to reset it.
+    ```
+  * Other examples of **tips**:
+    * Your topic name can be no longer than 52 characters.
+    * If you are unsure of the code for any particular emoji visit Emoji
+      Cheat Sheet for a complete list.
+  * Example **warning**:
+      ```
+      !!! warning ""
+          If you attempt to input a nonexistent stream name, an error
+          message will appear.
+      ```
+
+* **Screenshot** guidelines:
+  * Only include a screenshot if it will help guide the user. E.g. include a
+    screenshot if the user needs to find a button in the corner. Don't
+    include a screenshot if the element the user needs to interact with is
+    the only thing on the page. Using too many screenshots creates problems:
+      * **Maintenance**: The screen shot has to be updated every time the UI
+        is changed.
+      * It makes the instructions look longer and therefore more complicated.
+  * Never include the whole Zulip window in a screenshot. Focus on the
+    relevant part of the app.
+  * The screenshot should always come *after* the text that describes it,
+    never before. E.g.:
+
+    1. Click the **Sign in with Google** button located under the **Login**
+      button and **Forgot your password?** link.
+
+      ![Zulip sign in Google](/images/signin-google.png)
+
+* Standard formulas for directing users to commonly used pages:
+
+  * There is a macro for directing users to the **Subscriptions** page:
+    `{!subscriptions.md!}`
+
+  * The **Go to the** macro (`{!go-to-the.md}`) usually precedes the
+  **Settings** and **Administration** macros. This macro transforms the
+  following content into a step.
+
+    * The **Settings** macro (`{!settings.md!}`) directs users to the **Settings**
+  page. It is usually preceded by the **Go to the** macro and a link to a
+  particular section in the **Settings** page.
+
+    * The **Administration** macro (`{!admin.md!}`) directs users to the
+  **Administration** page. It is usually preceded by the **Go to the** macro and
+  a link to a particular section in the **Administration** page.
+
+    * Example:
+      ```.md
+      {!go-to-the.md!} [Notifications](/#settings/notifications)
+      {!settings.md!}
+      ```
+      renders as:
+      ```.md
+      1. Go to the [Notifications](/#settings/notifications) tab on the
+      [Settings](/help/edit-settings) page.
+      ```

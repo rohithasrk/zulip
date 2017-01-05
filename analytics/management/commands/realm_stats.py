@@ -86,7 +86,7 @@ class Command(BaseCommand):
         # type: (*Any, **Any) -> None
         if options['realms']:
             try:
-                realms = [get_realm(domain) for domain in options['realms']]
+                realms = [get_realm(string_id) for string_id in options['realms']]
             except Realm.DoesNotExist as e:
                 print(e)
                 exit(1)
@@ -94,7 +94,7 @@ class Command(BaseCommand):
             realms = Realm.objects.all()
 
         for realm in realms:
-            print(realm.domain)
+            print(realm.string_id)
 
             user_profiles = UserProfile.objects.filter(realm=realm, is_active=True)
             active_users = self.active_users(realm)

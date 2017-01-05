@@ -40,6 +40,7 @@ from datetime import timedelta
 import pylibmc
 import re
 import logging
+import sre_constants
 import time
 import datetime
 
@@ -116,6 +117,7 @@ class Realm(ModelReprMixin, models.Model):
     invite_required = models.BooleanField(default=True) # type: bool
     invite_by_admins_only = models.BooleanField(default=False) # type: bool
     create_stream_by_admins_only = models.BooleanField(default=False) # type: bool
+    add_emoji_by_admins_only = models.BooleanField(default=False) # type: bool
     mandatory_topics = models.BooleanField(default=False) # type: bool
     show_digest_email = models.BooleanField(default=True) # type: bool
     name_changes_disabled = models.BooleanField(default=False) # type: bool
@@ -136,6 +138,7 @@ class Realm(ModelReprMixin, models.Model):
     default_language = models.CharField(default=u'en', max_length=MAX_LANGUAGE_ID_LENGTH) # type: Text
     authentication_methods = BitField(flags=AUTHENTICATION_FLAGS,
                                       default=2**31 - 1) # type: BitHandler
+    waiting_period_threshold = models.PositiveIntegerField(default=0) # type: int
 
     DEFAULT_NOTIFICATION_STREAM_NAME = u'announce'
 
@@ -239,18 +242,7 @@ class Realm(ModelReprMixin, models.Model):
 
 post_save.connect(flush_realm, sender=Realm)
 
-def get_realm(domain):
-    # type: (Text) -> Optional[Realm]
-    if not domain:
-        return None
-    try:
-        return Realm.objects.get(domain__iexact=domain.strip())
-    except Realm.DoesNotExist:
-        return None
-
-# Added to assist with the domain to string_id transition. Will eventually
-# be renamed and replace get_realm.
-def get_realm_by_string_id(string_id):
+def get_realm(string_id):
     # type: (Text) -> Optional[Realm]
     if not string_id:
         return None
@@ -259,12 +251,11 @@ def get_realm_by_string_id(string_id):
     except Realm.DoesNotExist:
         return None
 
-def completely_open(domain):
-    # type: (Text) -> bool
-    # This domain is completely open to everyone on the internet to
-    # join. E-mail addresses do not need to match the domain and
+def completely_open(realm):
+    # type: (Realm) -> bool
+    # This realm is completely open to everyone on the internet to
+    # join. E-mail addresses do not need to match a realmalias and
     # an invite from an existing user is not required.
-    realm = get_realm(domain)
     if not realm:
         return False
     return not realm.invite_required and not realm.restricted_to_domain
@@ -351,6 +342,7 @@ def list_of_domains_for_realm(realm):
     return list(RealmAlias.objects.filter(realm = realm).values_list('domain', flat=True))
 
 class RealmEmoji(ModelReprMixin, models.Model):
+    author = models.ForeignKey('UserProfile', blank=True, null=True)
     realm = models.ForeignKey(Realm) # type: Realm
     # Second part of the regex (negative lookbehind) disallows names ending with one of the punctuation characters
     name = models.TextField(validators=[MinLengthValidator(1),
@@ -370,9 +362,17 @@ class RealmEmoji(ModelReprMixin, models.Model):
 def get_realm_emoji_uncached(realm):
     # type: (Realm) -> Dict[Text, Dict[str, Text]]
     d = {}
-    for row in RealmEmoji.objects.filter(realm=realm):
+    for row in RealmEmoji.objects.filter(realm=realm).select_related('author'):
+        if row.author:
+            author = {
+                'id': row.author.id,
+                'email': row.author.email,
+                'full_name': row.author.full_name}
+        else:
+            author = None
         d[row.name] = dict(source_url=row.img_url,
-                           display_url=get_camo_url(row.img_url))
+                           display_url=get_camo_url(row.img_url),
+                           author=author)
     return d
 
 def flush_realm_emoji(sender, **kwargs):
@@ -387,15 +387,15 @@ post_delete.connect(flush_realm_emoji, sender=RealmEmoji)
 
 def filter_pattern_validator(value):
     # type: (Text) -> None
-    regex = re.compile(r'(?:[\w\-#]+)(\(\?P<\w+>.+\))')
-    error_msg = 'Invalid filter pattern, you must use the following format PREFIX-(?P<id>.+)'
+    regex = re.compile(r'(?:[\w\-#]*)(\(\?P<\w+>.+\))')
+    error_msg = 'Invalid filter pattern, you must use the following format OPTIONAL_PREFIX(?P<id>.+)'
 
     if not regex.match(str(value)):
         raise ValidationError(error_msg)
 
     try:
         re.compile(value)
-    except:
+    except sre_constants.error:
         # Regex is invalid
         raise ValidationError(error_msg)
 
@@ -418,47 +418,46 @@ class RealmFilter(models.Model):
         # type: () -> Text
         return u"<RealmFilter(%s): %s %s>" % (self.realm.domain, self.pattern, self.url_format_string)
 
-def get_realm_filters_cache_key(domain):
-    # type: (Text) -> Text
-    return u'all_realm_filters:%s' % (domain,)
+def get_realm_filters_cache_key(realm_id):
+    # type: (int) -> Text
+    return u'all_realm_filters:%s' % (realm_id,)
 
 # We have a per-process cache to avoid doing 1000 remote cache queries during page load
-per_request_realm_filters_cache = {} # type: Dict[Text, List[Tuple[Text, Text, int]]]
+per_request_realm_filters_cache = {} # type: Dict[int, List[Tuple[Text, Text, int]]]
 
-def domain_in_local_realm_filters_cache(domain):
-    # type: (Text) -> bool
-    return domain in per_request_realm_filters_cache
+def realm_in_local_realm_filters_cache(realm_id):
+    # type: (int) -> bool
+    return realm_id in per_request_realm_filters_cache
 
-def realm_filters_for_domain(domain):
-    # type: (Text) -> List[Tuple[Text, Text, int]]
-    domain = domain.lower()
-    if not domain_in_local_realm_filters_cache(domain):
-        per_request_realm_filters_cache[domain] = realm_filters_for_domain_remote_cache(domain)
-    return per_request_realm_filters_cache[domain]
+def realm_filters_for_realm(realm_id):
+    # type: (int) -> List[Tuple[Text, Text, int]]
+    if not realm_in_local_realm_filters_cache(realm_id):
+        per_request_realm_filters_cache[realm_id] = realm_filters_for_realm_remote_cache(realm_id)
+    return per_request_realm_filters_cache[realm_id]
 
 @cache_with_key(get_realm_filters_cache_key, timeout=3600*24*7)
-def realm_filters_for_domain_remote_cache(domain):
-    # type: (Text) -> List[Tuple[Text, Text, int]]
+def realm_filters_for_realm_remote_cache(realm_id):
+    # type: (int) -> List[Tuple[Text, Text, int]]
     filters = []
-    for realm_filter in RealmFilter.objects.filter(realm=get_realm(domain)):
+    for realm_filter in RealmFilter.objects.filter(realm_id=realm_id):
         filters.append((realm_filter.pattern, realm_filter.url_format_string, realm_filter.id))
 
     return filters
 
 def all_realm_filters():
-    # type: () -> Dict[Text, List[Tuple[Text, Text, int]]]
-    filters = defaultdict(list) # type: Dict[Text, List[Tuple[Text, Text, int]]]
+    # type: () -> Dict[int, List[Tuple[Text, Text, int]]]
+    filters = defaultdict(list) # type: Dict[int, List[Tuple[Text, Text, int]]]
     for realm_filter in RealmFilter.objects.all():
-        filters[realm_filter.realm.domain].append((realm_filter.pattern, realm_filter.url_format_string, realm_filter.id))
+        filters[realm_filter.realm_id].append((realm_filter.pattern, realm_filter.url_format_string, realm_filter.id))
 
     return filters
 
 def flush_realm_filter(sender, **kwargs):
     # type: (Any, **Any) -> None
-    realm = kwargs['instance'].realm
-    cache_delete(get_realm_filters_cache_key(realm.domain))
+    realm_id = kwargs['instance'].realm_id
+    cache_delete(get_realm_filters_cache_key(realm_id))
     try:
-        per_request_realm_filters_cache.pop(realm.domain.lower())
+        per_request_realm_filters_cache.pop(realm_id)
     except KeyError:
         pass
 
@@ -508,6 +507,7 @@ class UserProfile(ModelReprMixin, AbstractBaseUser, PermissionsMixin):
 
     # PM + @-mention notifications.
     enable_desktop_notifications = models.BooleanField(default=True) # type: bool
+    pm_content_in_desktop_notifications = models.BooleanField(default=True)  # type: bool
     enable_sounds = models.BooleanField(default=True) # type: bool
     enable_offline_email_notifications = models.BooleanField(default=True) # type: bool
     enable_offline_push_notifications = models.BooleanField(default=True) # type: bool
@@ -530,7 +530,7 @@ class UserProfile(ModelReprMixin, AbstractBaseUser, PermissionsMixin):
     default_all_public_streams = models.BooleanField(default=False) # type: bool
 
     # UI vars
-    enter_sends = models.NullBooleanField(default=True) # type: Optional[bool]
+    enter_sends = models.NullBooleanField(default=False) # type: Optional[bool]
     autoscroll_forever = models.BooleanField(default=False) # type: bool
     left_side_userlist = models.BooleanField(default=False) # type: bool
 
@@ -604,10 +604,14 @@ class UserProfile(ModelReprMixin, AbstractBaseUser, PermissionsMixin):
 
     def can_create_streams(self):
         # type: () -> bool
-        if self.is_realm_admin or not self.realm.create_stream_by_admins_only:
+        diff = (timezone.now() - self.date_joined).days
+        if self.is_realm_admin:
             return True
-        else:
+        elif self.realm.create_stream_by_admins_only:
             return False
+        if diff >= self.realm.waiting_period_threshold:
+            return True
+        return False
 
     def major_tos_version(self):
         # type: () -> int
@@ -861,6 +865,26 @@ def bulk_get_recipients(type, type_ids):
     return generic_bulk_cached_fetch(cache_key_function, query_function, type_ids,
                                      id_fetcher=lambda recipient: recipient.type_id)
 
+
+def sew_messages_and_reactions(messages, reactions):
+    # type: (List[Dict[str, Any]], List[Dict[str, Any]]) -> List[Dict[str, Any]]
+    """Given a iterable of messages and reactions stitch reactions
+    into messages.
+    """
+    # Add all messages with empty reaction item
+    for message in messages:
+        message['reactions'] = []
+
+    # Convert list of messages into dictionary to make reaction stitching easy
+    converted_messages = {message['id']: message for message in messages}
+
+    for reaction in reactions:
+        converted_messages[reaction['message_id']]['reactions'].append(
+            reaction)
+
+    return list(converted_messages.values())
+
+
 class Message(ModelReprMixin, models.Model):
     sender = models.ForeignKey(UserProfile) # type: UserProfile
     recipient = models.ForeignKey(Recipient) # type: Recipient
@@ -945,7 +969,14 @@ class Message(ModelReprMixin, models.Model):
             'sender__avatar_source',
             'sender__is_mirror_dummy',
         ]
-        return Message.objects.filter(id__in=needed_ids).values(*fields)
+        messages = Message.objects.filter(id__in=needed_ids).values(*fields)
+        """Adding one-many or Many-Many relationship in values results in N X
+        results.
+
+        Link: https://docs.djangoproject.com/en/1.8/ref/models/querysets/#values
+        """
+        reactions = Reaction.get_raw_db_rows(needed_ids)
+        return sew_messages_and_reactions(messages, reactions)
 
     def sent_by_human(self):
         # type: () -> bool
@@ -1018,6 +1049,13 @@ class Reaction(ModelReprMixin, models.Model):
 
     class Meta(object):
         unique_together = ("user_profile", "message", "emoji_name")
+
+    @staticmethod
+    def get_raw_db_rows(needed_ids):
+        # type: (List[int]) -> List[Dict[str, Any]]
+        fields = ['message_id', 'emoji_name', 'user_profile__email',
+                  'user_profile__id', 'user_profile__full_name']
+        return Reaction.objects.filter(message_id__in=needed_ids).values(*fields)
 
 # Whenever a message is sent, for each user current subscribed to the
 # corresponding Recipient object, we add a row to the UserMessage

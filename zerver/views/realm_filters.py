@@ -1,6 +1,6 @@
 from __future__ import absolute_import
 
-from six import text_type
+from typing import Text
 from django.core.exceptions import ValidationError
 from django.http import HttpRequest, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -11,13 +11,13 @@ from zerver.lib.actions import do_add_realm_filter, do_remove_realm_filter
 from zerver.lib.response import json_success, json_error
 from zerver.lib.rest import rest_dispatch as _rest_dispatch
 from zerver.lib.validator import check_string
-from zerver.models import realm_filters_for_domain, UserProfile, RealmFilter
+from zerver.models import realm_filters_for_realm, UserProfile, RealmFilter
 
 
 # Custom realm filters
 def list_filters(request, user_profile):
     # type: (HttpRequest, UserProfile) -> HttpResponse
-    filters = realm_filters_for_domain(user_profile.realm.domain)
+    filters = realm_filters_for_realm(user_profile.realm_id)
     return json_success({'filters': filters})
 
 
@@ -25,7 +25,7 @@ def list_filters(request, user_profile):
 @has_request_variables
 def create_filter(request, user_profile, pattern=REQ(),
                   url_format_string=REQ()):
-    # type: (HttpRequest, UserProfile, text_type, text_type) -> HttpResponse
+    # type: (HttpRequest, UserProfile, Text, Text) -> HttpResponse
     try:
         filter_id = do_add_realm_filter(
             realm=user_profile.realm,

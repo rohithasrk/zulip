@@ -78,6 +78,8 @@ else:
 TEST_SUITE = False
 # The new user tutorial is enabled by default, but disabled for client tests.
 TUTORIAL_ENABLED = True
+# This is overridden in test_settings.py for the test suites
+CASPER_TESTS = False
 
 # Import variables like secrets from the prod_settings file
 # Import prod_settings after determining the deployment/machine type
@@ -138,6 +140,7 @@ DEFAULT_SETTINGS = {'TWITTER_CONSUMER_KEY': '',
                     'ADMINS': '',
                     'SHARE_THE_LOVE': False,
                     'INLINE_IMAGE_PREVIEW': True,
+                    'INLINE_URL_EMBED_PREVIEW': False,
                     'CAMO_URI': '',
                     'ENABLE_FEEDBACK': PRODUCTION,
                     'SEND_MISSED_MESSAGE_EMAILS_AS_USER': False,
@@ -154,6 +157,7 @@ DEFAULT_SETTINGS = {'TWITTER_CONSUMER_KEY': '',
                     'REGISTER_LINK_DISABLED': False,
                     'LOGIN_LINK_DISABLED': False,
                     'ABOUT_LINK_DISABLED': False,
+                    'FIND_TEAM_LINK_DISABLED': True,
                     'CUSTOM_LOGO_URL': None,
                     'VERBOSE_SUPPORT_OFFERS': False,
                     'STATSD_HOST': '',
@@ -168,11 +172,16 @@ DEFAULT_SETTINGS = {'TWITTER_CONSUMER_KEY': '',
                     'SOCIAL_AUTH_GITHUB_KEY': None,
                     'SOCIAL_AUTH_GITHUB_ORG_NAME': None,
                     'SOCIAL_AUTH_GITHUB_TEAM_ID': None,
+                    'SOCIAL_AUTH_FIELDS_STORED_IN_SESSION': ['subdomain'],
                     'DBX_APNS_CERT_FILE': None,
                     'DBX_APNS_KEY_FILE': None,
                     'PERSONAL_ZMIRROR_SERVER': None,
                     'EXTRA_INSTALLED_APPS': [],
-                    'DEFAULT_NEW_REALM_STREAMS': ["social", "general", "zulip"],
+                    'DEFAULT_NEW_REALM_STREAMS': {
+                        "social": {"description": "For socializing", "invite_only": False},
+                        "general": {"description": "For general stuff", "invite_only": False},
+                        "zulip": {"description": "For zulip stuff", "invite_only": False}
+                    },
                     'REALM_CREATION_LINK_VALIDITY_DAYS': 7,
                     'TERMS_OF_SERVICE': None,
                     'TOS_VERSION': None,
@@ -181,6 +190,7 @@ DEFAULT_SETTINGS = {'TWITTER_CONSUMER_KEY': '',
                     'USING_PGROONGA': False,
                     'POST_MIGRATION_CACHE_FLUSHING': False,
                     'ENABLE_FILE_LINKS': False,
+                    'USE_WEBSOCKETS': True,
                     }
 
 for setting_name, setting_val in six.iteritems(DEFAULT_SETTINGS):
@@ -670,7 +680,9 @@ PIPELINE = {
                 'styles/settings.css',
                 'styles/subscriptions.css',
                 'styles/compose.css',
+                'styles/reactions.css',
                 'styles/left-sidebar.css',
+                'styles/right-sidebar.css',
                 'styles/overlay.css',
                 'styles/pygments.css',
                 'styles/thirdparty-fonts.css',
@@ -689,7 +701,9 @@ PIPELINE = {
                 'styles/settings.css',
                 'styles/subscriptions.css',
                 'styles/compose.css',
+                'styles/reactions.css',
                 'styles/left-sidebar.css',
+                'styles/right-sidebar.css',
                 'styles/overlay.css',
                 'styles/pygments.css',
                 'styles/thirdparty-fonts.css',
@@ -709,7 +723,6 @@ PIPELINE = {
     },
     'JAVASCRIPT': {},
 }
-
 JS_SPECS = {
     'common': {
         'source_filenames': (
@@ -723,13 +736,13 @@ JS_SPECS = {
     },
     'signup': {
         'source_filenames': (
-            'js/signup.js',
+            'js/portico/signup.js',
             'node_modules/jquery-validation/dist/jquery.validate.js',
             ),
         'output_filename':  'min/signup.js'
     },
     'api': {
-        'source_filenames': ('js/api.js',),
+        'source_filenames': ('js/portico/api.js',),
         'output_filename':  'min/api.js'
     },
     'app_debug': {
@@ -741,6 +754,7 @@ JS_SPECS = {
             'third/bootstrap-notify/js/bootstrap-notify.js',
             'third/html5-formdata/formdata.js',
             'node_modules/jquery-validation/dist/jquery.validate.js',
+            'node_modules/sockjs-client/sockjs.js',
             'third/jquery-form/jquery.form.js',
             'third/jquery-filedrop/jquery.filedrop.js',
             'third/jquery-caret/jquery.caret.1.5.2.js',
@@ -755,7 +769,6 @@ JS_SPECS = {
             'third/spectrum/spectrum.js',
             'third/string-prototype-codepointat/codepointat.js',
             'third/winchan/winchan.js',
-            'third/sockjs/sockjs-0.3.4.js',
             'third/handlebars/handlebars.runtime.js',
             'third/marked/lib/marked.js',
             'templates/compiled.js',
@@ -830,6 +843,7 @@ JS_SPECS = {
             'js/referral.js',
             'js/custom_markdown.js',
             'js/bot_data.js',
+            'js/reactions.js',
             # JS bundled by webpack is also included here if PIPELINE_ENABLED setting is true
         ],
         'output_filename': 'min/app.js'
@@ -840,10 +854,18 @@ JS_SPECS = {
         ),
         'output_filename': 'min/activity.js'
     },
+    'stats': {
+        'source_filenames': (
+            'node_modules/plotly.js/dist/plotly.js',
+            'node_modules/jquery/dist/jquery.js',
+            'js/portico/stats.js'
+        ),
+        'output_filename': 'min/stats.js'
+    },
     # We also want to minify sockjs separately for the sockjs iframe transport
     'sockjs': {
-        'source_filenames': ('third/sockjs/sockjs-0.3.4.js',),
-        'output_filename': 'min/sockjs-0.3.4.min.js'
+        'source_filenames': ('node_modules/sockjs-client/sockjs.js',),
+        'output_filename': 'min/sockjs.min.js'
     },
 }
 
@@ -955,8 +977,8 @@ LOGGING = {
             'propagate': False,
         },
         'django': {
-            'handlers': (['zulip_admins'] if ERROR_REPORTING else [])
-                        + ['console', 'file', 'errors_file'],
+            'handlers': (['zulip_admins'] if ERROR_REPORTING else [] +
+                         ['console', 'file', 'errors_file']),
             'level':    'INFO',
             'propagate': False,
         },
@@ -1014,8 +1036,8 @@ DBX_IOS_APP_ID = 'com.dropbox.Zulip'
 
 USING_APACHE_SSO = ('zproject.backends.ZulipRemoteUserBackend' in AUTHENTICATION_BACKENDS)
 
-if (len(AUTHENTICATION_BACKENDS) == 1 and
-    AUTHENTICATION_BACKENDS[0] == "zproject.backends.ZulipRemoteUserBackend"):
+if len(AUTHENTICATION_BACKENDS) == 1 and (AUTHENTICATION_BACKENDS[0] ==
+                                          "zproject.backends.ZulipRemoteUserBackend"):
     HOME_NOT_LOGGED_IN = "/accounts/login/sso"
     ONLY_SSO = True
 else:

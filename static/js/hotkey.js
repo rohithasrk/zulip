@@ -43,6 +43,7 @@ var hotkeys_shift_insensitive = {
     27: {name: 'escape', message_view_only: false}, // escape
     47: {name: 'search', message_view_only: false}, // '/'
     63: {name: 'show_shortcuts', message_view_only: false}, // '?'
+    64: {name: 'compose_reply_with_mention', message_view_only: true}, // '@'
     65: {name: 'stream_cycle_backward', message_view_only: true}, // 'A'
     67: {name: 'compose_private_message', message_view_only: true}, // 'C'
     68: {name: 'stream_cycle_forward', message_view_only: true}, // 'D'
@@ -190,9 +191,14 @@ function process_hotkey(e) {
         }
     }
 
-    if (event_name === "escape" && $("#overlay").hasClass("show")) {
-        ui.exit_lightbox_photo();
-        return true;
+    if (event_name === "escape") {
+        if ($("#overlay").hasClass("show")) {
+            ui.exit_lightbox_photo();
+            return true;
+        } else if ($("#subscription_overlay").hasClass("show")) {
+            $("#subscription_overlay").click();
+            return true;
+        }
     }
 
     // Process hotkeys specially when in an input, select, textarea, or send button
@@ -359,6 +365,11 @@ function process_hotkey(e) {
         case 'respond_to_author': // 'R': respond to author
             compose.respond_to_message({reply_type: "personal", trigger: 'hotkey pm'});
             return true;
+        case 'compose_reply_with_mention': // '@': respond to message with mention to author
+            compose.respond_to_message({trigger: 'hotkey'});
+            var message = current_msg_list.selected_message();
+            $("#new_message_content").val('@**' + message.sender_full_name + '** ');
+            return true;
     }
 
     return false;
@@ -377,7 +388,7 @@ function process_hotkey(e) {
 $(document).keydown(function (e) {
     // Restrict to non-alphanumeric keys
     // check if 27 (esc) because it doesn't register under .keypress()
-    if (48 > e.which || 90 < e.which || e.which === 27) {
+    if (e.which < 48 || e.which > 90 || e.which === 27) {
         if (process_hotkey(e)) {
             e.preventDefault();
         }
@@ -402,3 +413,7 @@ $(document).keypress(function (e) {
 return exports;
 
 }());
+
+if (typeof module !== 'undefined') {
+    module.exports = hotkeys;
+}

@@ -2,12 +2,12 @@ from __future__ import absolute_import
 from __future__ import print_function
 from optparse import make_option
 
-from typing import Any
+from typing import Any, Text
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandParser
 from zerver.lib.actions import Realm, do_create_realm, set_default_streams
-from zerver.models import RealmAlias, can_add_alias, get_realm_by_string_id
+from zerver.models import RealmAlias, can_add_alias, get_realm
 
 if settings.ZILENCER_ENABLED:
     from zilencer.models import Deployment
@@ -94,7 +94,7 @@ Usage: ./manage.py create_realm --string_id=acme --name='Acme'"""
         if domain is not None:
             self.validate_domain(domain)
 
-        if get_realm_by_string_id(string_id) is not None:
+        if get_realm(string_id) is not None:
             raise ValueError("string_id taken. Please choose another one.")
 
         realm, created = do_create_realm(string_id, name, org_type=options["org_type"])
@@ -113,8 +113,11 @@ Usage: ./manage.py create_realm --string_id=acme --name='Acme'"""
                 deployment.realms.add(realm)
                 deployment.save()
             # In the else case, we are not using the Deployments feature.
-
-            set_default_streams(realm, ["social", "engineering"])
+            stream_dict = {
+                "social": {"description": "For socializing", "invite_only": False},
+                "engineering": {"description": "For engineering", "invite_only": False}
+            } # type: Dict[Text, Dict[Text, Any]]
+            set_default_streams(realm, stream_dict)
 
             print("\033[1;36mDefault streams set to social,engineering,zulip!\033[0m")
         else:

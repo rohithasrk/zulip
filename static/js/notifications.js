@@ -9,7 +9,6 @@ var notice_memory = {};
 var window_has_focus = document.hasFocus && document.hasFocus();
 
 var asked_permission_already = false;
-var names;
 var supports_sound;
 
 var unread_pms_favicon = '/static/images/favicon/favicon-pms.png';
@@ -30,8 +29,10 @@ if (window.webkitNotifications) {
             return 2;
         },
         requestPermission: window.Notification.requestPermission,
-        createNotification: function createNotification(icon, title, content) {
-            var notification_object = new window.Notification(title, {icon: icon, body: content});
+        createNotification: function createNotification(icon, title, content, tag) {
+            var notification_object = new window.Notification(title, {icon: icon,
+                                                                      body: content,
+                                                                      tag: tag});
             notification_object.show = function () {};
             notification_object.cancel = function () { notification_object.close(); };
             return notification_object;
@@ -40,7 +41,7 @@ if (window.webkitNotifications) {
 }
 
 
-function browser_desktop_notifications_on () {
+function browser_desktop_notifications_on() {
     return (notifications_api &&
             // Firefox on Ubuntu claims to do webkitNotifications but its notifications are terrible
             /webkit/i.test(navigator.userAgent) &&
@@ -50,7 +51,7 @@ function browser_desktop_notifications_on () {
         (window.bridge !== undefined);
 }
 
-function cancel_notification_object (notification_object) {
+function cancel_notification_object(notification_object) {
         // We must remove the .onclose so that it does not trigger on .cancel
         notification_object.onclose = function () {};
         notification_object.onclick = function () {};
@@ -218,14 +219,28 @@ exports.window_has_focus = function () {
     return window_has_focus;
 };
 
-function in_browser_notify(message, title, content) {
-    var notification_html = $(templates.render('notification', {gravatar_url: ui.small_avatar_url(message),
-                                                                title: title,
-                                                                content: content}));
-    $('.top-right').notify({
-        message: {html: notification_html},
-        fadeOut: {enabled: true, delay: 4000}
+function in_browser_notify(message, title, content, raw_operators, opts) {
+    var notification_html = $(templates.render('notification', {
+        gravatar_url: ui.small_avatar_url(message),
+        title: title,
+        content: content,
+        message_id: message.id,
+    }));
+
+    $(".top-right").notify({
+        message: {
+            html: notification_html
+        },
+        fadeOut: {
+            enabled: true,
+            delay: 4000
+        }
     }).show();
+
+    $(".notification[data-message-id='" + message.id + "]'").expectOne().data("narrow", {
+        raw_operators: raw_operators,
+        opts_notif: opts
+    });
 }
 
 exports.notify_above_composebox = function (note, link_class, link_msg_id, link_text) {
@@ -248,7 +263,8 @@ function process_notification(notification) {
     var title = message.sender_full_name;
     var msg_count = 1;
     var notification_source;
-
+    var raw_operators = [];
+    var opts = {select_first_unread: true, trigger: "notification click"};
     // Convert the content to plain text, replacing emoji with their alt text
     content = $('<div/>').html(message.content);
     ui.replace_emoji_with_text(content);
@@ -259,6 +275,10 @@ function process_notification(notification) {
     }
 
     if (message.type === "private") {
+        if (page_params.pm_content_in_desktop_notifications !== undefined
+            && !page_params.pm_content_in_desktop_notifications) {
+            content = "New private message from " + message.sender_full_name;
+        }
         key = message.display_reply_to;
         other_recipients = message.display_reply_to;
         // Remove the sender from the list of other recipients
@@ -295,25 +315,35 @@ function process_notification(notification) {
         cancel_notification_object(notification_object);
     }
 
-    if (message.type === "private" && message.display_recipient.length > 2) {
-        // If the message has too many recipients to list them all...
-        if (content.length + title.length + other_recipients.length > 230) {
-            // Then count how many people are in the conversation and summarize
-            // by saying the conversation is with "you and [number] other people"
-            other_recipients = other_recipients.replace(/[^,]/g, "").length +
-                               " other people";
+    if (message.type === "private") {
+        if (message.display_recipient.length > 2) {
+            // If the message has too many recipients to list them all...
+            if (content.length + title.length + other_recipients.length > 230) {
+                // Then count how many people are in the conversation and summarize
+                // by saying the conversation is with "you and [number] other people"
+                other_recipients = other_recipients.replace(/[^,]/g, "").length +
+                                   " other people";
+            }
+
+            title += " (to you and " + other_recipients + ")";
+        } else {
+            title += " (to you)";
         }
-        title += " (to you and " + other_recipients + ")";
+
+        raw_operators = [{operand: message.reply_to, operator: "pm-with"}];
     }
+
     if (message.type === "stream") {
         title += " (to " + message.stream + " > " + message.subject + ")";
+        raw_operators = [{operator: "stream", operand: message.stream},
+                         {operator: "topic", operand: message.subject}];
     }
 
     if (window.bridge === undefined && notification.webkit_notify === true) {
         var icon_url = ui.small_avatar_url(message);
         notice_memory[key] = {
             obj: notifications_api.createNotification(
-                    icon_url, title, content),
+                    icon_url, title, content, message.id),
             msg_count: msg_count,
             message_id: message.id
         };
@@ -334,14 +364,15 @@ function process_notification(notification) {
             if (perm === 'granted') {
                 notification_object = new Notification(title, {
                     body: content,
-                    iconUrl: ui.small_avatar_url(message)
+                    iconUrl: ui.small_avatar_url(message),
+                    tag: message.id
                 });
             } else {
-                in_browser_notify(message, title, content);
+                in_browser_notify(message, title, content, raw_operators, opts);
             }
         });
     } else if (notification.webkit_notify === false) {
-        in_browser_notify(message, title, content);
+        in_browser_notify(message, title, content, raw_operators, opts);
     } else {
         // Shunt the message along to the desktop client
         window.bridge.desktopNotification(title, content, notification_source);
@@ -617,9 +648,15 @@ exports.handle_global_notification_updates = function (notification_name, settin
         page_params.enable_online_push_notifications = setting;
     } else if (notification_name === "enable_digest_emails") {
         page_params.enable_digest_emails = setting;
+    } else if (notification_name === "pm_content_in_desktop_notifications") {
+        page_params.pm_content_in_desktop_notifications = setting;
     }
 };
 
 return exports;
 
 }());
+
+if (typeof module !== 'undefined') {
+    module.exports = notifications;
+}

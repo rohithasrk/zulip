@@ -1,6 +1,6 @@
 set_global('page_params', {realm_emoji: {
-  burrito: {display_url: '/static/third/gemoji/images/emoji/burrito.png',
-            source_url: '/static/third/gemoji/images/emoji/burrito.png'},
+  burrito: {display_url: '/static/generated/emoji/images/emoji/burrito.png',
+            source_url: '/static/generated/emoji/images/emoji/burrito.png'},
 }});
 
 add_dependencies({
@@ -33,7 +33,7 @@ function render(template_name, args) {
     return global.render_template(template_name, args);
 }
 
-(function test_finding_partials () {
+(function test_finding_partials() {
     var fns = global.find_included_partials('settings_tab');
     assert.deepEqual(fns, [
         'account-settings',
@@ -45,7 +45,7 @@ function render(template_name, args) {
     ]);
 }());
 
-(function test_handlebars_bug () {
+(function test_handlebars_bug() {
     // There was a bug in 1.0.9 where identically structured
     // blocks get confused, so when foo is false, it still
     // renders the foo-is-true block.
@@ -329,7 +329,7 @@ function render(template_name, args) {
     var html = render('compose_all_everyone', args);
     global.write_handlebars_output("compose_all_everyone", html);
     var button = $(html).find("button:first");
-    assert.equal(button.text(), "YES");
+    assert.equal(button.text(), "Yes, send");
     var error_msg = $(html).find('span.compose-all-everyone-msg').text().trim();
     assert.equal(error_msg, "Are you sure you want to mention all 101 people in this stream?");
 }());
@@ -532,6 +532,21 @@ function render(template_name, args) {
     assert($(html).text().trim(), "Message to stream devel");
 }());
 
+(function message_reaction() {
+    var args = {
+        emoji_name: 'smile',
+        message_id: '1'
+    };
+
+    var html = '';
+    html += '<div>';
+    html += render('message_reaction', args);
+    html += '</div>';
+
+    global.write_handlebars_output("message_reaction", html);
+    assert($(html).find(".message_reaction").has(".emoji .emoji-smile"));
+}());
+
 (function new_stream_users() {
     var args = {
         users: [
@@ -574,6 +589,22 @@ function render(template_name, args) {
     var button_area = $(html).find(".propagate-notifications-controls");
     assert.equal(button_area.find(".yes_propagate_notifications").text().trim(), 'Yes');
     assert.equal(button_area.find(".no_propagate_notifications").text().trim(), 'No');
+}());
+
+(function reaction_popover_content() {
+    var args = {
+        search: 'Search',
+        message_id: 1,
+        emojis: global.emoji.emojis_name_to_css_class,
+    };
+
+    var html = '<div style="height: 250px">';
+    html += render('reaction_popover_content', args);
+    html += "</div>";
+    // test to make sure the first emoji is present in the popover
+    var emoji_key = $(html).find(".emoji-100").attr('title');
+    assert.equal(emoji_key, ':100:');
+    global.write_handlebars_output("reaction_popover_content", html);
 }());
 
 (function settings_tab() {
